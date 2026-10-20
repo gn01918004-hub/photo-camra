@@ -4,14 +4,13 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.ContentResolver;
-import android.content.ContentValues;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.graphics.Bitmap;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Environment;
 import android.provider.MediaStore;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -31,7 +30,6 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -43,10 +41,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
-    private static final int REQ_CAPTURE = 1;
-    private static final String ALBUM = "工作照片";
-
-    private SharedPreferences sp;
+    private Store store;
     private final ExecutorService bg = Executors.newSingleThreadExecutor();
 
     private TextView nextNum, todayText, modeText, dayCount, emptyText;
@@ -54,16 +49,21 @@ public class MainActivity extends Activity {
     private LinearLayout settingsPanel, photoList;
     private Spinner daySpinner;
 
-    private List<Record> records = new ArrayList<>();
     private final List<String> days = new ArrayList<>();
     private String selectedDay;
+
+    // 拍照畫面在背景存好照片時，主畫面跟著更新
+    private final SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, key) -> {
+        if ("records".equals(key)) renderAll();
+        else if ("next".equals(key)) paintBoard();
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        sp = getSharedPreferences("pointcam", MODE_PRIVATE);
-        records = Record.parseList(sp.getString("records", "[]"));
+        store = new Store(this);
+        migrateSettings();
 
         nextNum = findViewById(R.id.nextNum);
         todayText = findViewById(R.id.todayText);
@@ -76,29 +76,29 @@ public class MainActivity extends Activity {
         photoList = findViewById(R.id.photoList);
         daySpinner = findViewById(R.id.daySpinner);
 
-        shootBtn.setOnClickListener(v -> startCapture(null));
-        findViewById(R.id.plusBtn).setOnClickListener(v -> setNext(next() + 1));
-        findViewById(R.id.minusBtn).setOnClickListener(v -> { if (next() > 1) setNext(next() - 1); });
+        shootBtn.setOnClickListener(v -> startActivity(new Intent(this, CameraActivity.class)));
+        findViewById(R.id.pointBox).setOnClickListener(v -> store.editPointDialog(this, this::paintBoard));
+        findViewById(R.id.plusBtn).setOnClickListener(v -> { store.setNext(store.next() + 1); paintBoard(); });
+        findViewById(R.id.minusBtn).setOnClickListener(v -> { store.setNext(store.next() - 1); paintBoard(); });
         findViewById(R.id.resetBtn).setOnClickListener(v -> new AlertDialog.Builder(this)
                 .setMessage("確定要把點號重置為 1 嗎？已拍的照片會保留。")
                 .setNegativeButton("取消", null)
-                .setPositiveButton("確定", (d, w) -> { setNext(1); toast("點號已重置為 1"); })
+                .setPositiveButton("確定", (d, w) -> { store.setNext(1); paintBoard(); toast("點號已重置為 1"); })
                 .show());
         findViewById(R.id.settingsBtn).setOnClickListener(v -> settingsPanel.setVisibility(
                 settingsPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
         shareBtn.setOnClickListener(v -> shareDay(selectedDay));
 
         RadioGroup modeGroup = findViewById(R.id.modeGroup);
-        modeGroup.check(isDaily() ? R.id.modeDaily : R.id.modeManual);
+        modeGroup.check(store.isDaily() ? R.id.modeDaily : R.id.modeManual);
         modeGroup.setOnCheckedChangeListener((g, id) -> {
-            sp.edit().putString("mode", id == R.id.modeDaily ? "daily" : "manual").apply();
+            store.sp.edit().putString("mode", id == R.id.modeDaily ? "daily" : "manual").apply();
             paintBoard();
         });
         bindText(findViewById(R.id.projName), "proj");
         bindText(findViewById(R.id.prefix), "prefix");
-        CheckBox stampOn = findViewById(R.id.stampOn);
-        stampOn.setChecked(sp.getBoolean("stamp", true));
-        stampOn.setOnCheckedChangeListener((b, c) -> sp.edit().putBoolean("stamp", c).apply());
+        bindCheck(findViewById(R.id.stampPoint), "stampPoint");
+        bindCheck(findViewById(R.id.stampTime), "stampTime");
 
         daySpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> p, View v, int pos, long id) {
@@ -111,180 +111,39 @@ public class MainActivity extends Activity {
         });
     }
 
+    /** 舊版只有一個「印字」開關，拆成點號與時間兩個。 */
+    private void migrateSettings() {
+        SharedPreferences sp = store.sp;
+        if (sp.contains("stamp")) {
+            boolean on = sp.getBoolean("stamp", true);
+            sp.edit().putBoolean("stampPoint", on).putBoolean("stampTime", on).remove("stamp").apply();
+        }
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
-        rollDay();
+        if (store.rollDay()) {
+            selectedDay = Store.dayKey(new Date());
+            toast("新的一天，點號已重置為 1");
+        }
+        store.sp.registerOnSharedPreferenceChangeListener(prefListener);
         paintBoard();
         pruneMissingThenRender();
     }
 
-    // ---------- 點號與重置 ----------
-
-    private int next() { return sp.getInt("next", 1); }
-
-    private void setNext(int n) {
-        sp.edit().putInt("next", Math.max(1, n)).apply();
-        paintBoard();
-    }
-
-    private boolean isDaily() { return "daily".equals(sp.getString("mode", "daily")); }
-
-    /** 隔日自動重置：日期換了就把點號歸 1。 */
-    private void rollDay() {
-        String today = dayKey(new Date());
-        String last = sp.getString("lastDay", null);
-        if (!today.equals(last)) {
-            SharedPreferences.Editor e = sp.edit().putString("lastDay", today);
-            if (last != null && isDaily() && next() != 1) {
-                e.putInt("next", 1);
-                toast("新的一天，點號已重置為 1");
-            }
-            e.apply();
-            selectedDay = today;
-        }
+    @Override
+    protected void onPause() {
+        store.sp.unregisterOnSharedPreferenceChangeListener(prefListener);
+        super.onPause();
     }
 
     private void paintBoard() {
-        int n = next();
+        int n = store.next();
         nextNum.setText(String.valueOf(n));
-        shootBtn.setText("拍照 · 點 " + n);
+        shootBtn.setText("拍照 · " + Store.label(n));
         todayText.setText(new SimpleDateFormat("M/d（E）", Locale.TAIWAN).format(new Date()));
-        modeText.setText(isDaily() ? "隔日自動重置" : "僅手動重置");
-    }
-
-    // ---------- 拍照 ----------
-
-    /** retake 為 null 時拍新的一點，否則重拍該點。 */
-    private void startCapture(Record retake) {
-        rollDay();
-        Date now = new Date();
-        String day = retake != null ? retake.day : dayKey(now);
-        int point = retake != null ? retake.point : next();
-        Uri uri = insertImage(fileName(day, point) , day);
-        if (uri == null) { toast("無法在相簿建立照片，請確認手機儲存空間"); return; }
-
-        sp.edit()
-                .putString("pendingUri", uri.toString())
-                .putString("pendingDay", day)
-                .putInt("pendingPoint", point)
-                .putString("pendingRetake", retake != null ? retake.uri : null)
-                .apply();
-
-        Intent i = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-        i.putExtra(MediaStore.EXTRA_OUTPUT, uri);
-        i.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        try {
-            startActivityForResult(i, REQ_CAPTURE);
-        } catch (ActivityNotFoundException e) {
-            deleteUri(uri);
-            clearPending();
-            toast("找不到相機 App");
-        }
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != REQ_CAPTURE) return;
-        // 從 SharedPreferences 讀回，拍照時 App 被系統關掉也不會遺失
-        String us = sp.getString("pendingUri", null);
-        if (us == null) return;
-        Uri uri = Uri.parse(us);
-        String day = sp.getString("pendingDay", dayKey(new Date()));
-        int point = sp.getInt("pendingPoint", 1);
-        String retakeUri = sp.getString("pendingRetake", null);
-        clearPending();
-
-        if (resultCode != RESULT_OK || !hasContent(uri)) {
-            deleteUri(uri);
-            return;
-        }
-
-        Date now = new Date();
-        boolean stamp = sp.getBoolean("stamp", true);
-        String proj = sp.getString("proj", "").trim();
-        toast("點 " + point + " 處理中…");
-        shootBtn.setEnabled(false);
-        bg.execute(() -> {
-            String err = null;
-            if (stamp) {
-                List<String> lines = new ArrayList<>();
-                if (!proj.isEmpty()) lines.add(proj);
-                lines.add(day + "  " + timeStr(now));
-                try {
-                    Stamper.stamp(getContentResolver(), uri, "點 " + point, lines,
-                            new SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US).format(now));
-                } catch (Throwable t) {
-                    err = "照片已存，但印字失敗";
-                }
-            }
-            if (retakeUri != null) {
-                deleteUri(Uri.parse(retakeUri));
-                // 刪掉舊檔後把新檔改回原本的檔名（避免出現「(1)」）
-                ContentValues v = new ContentValues();
-                v.put(MediaStore.Images.Media.DISPLAY_NAME, fileName(day, point));
-                try { getContentResolver().update(uri, v, null, null); } catch (Exception ignored) { }
-            }
-            String msg = err;
-            runOnUiThread(() -> {
-                shootBtn.setEnabled(true);
-                Record r = new Record();
-                r.uri = uri.toString();
-                r.day = day;
-                r.point = point;
-                r.time = timeStr(now);
-                r.ts = now.getTime();
-                if (retakeUri != null) {
-                    for (int k = 0; k < records.size(); k++) {
-                        if (records.get(k).uri.equals(retakeUri)) { records.remove(k); break; }
-                    }
-                } else {
-                    sp.edit().putInt("next", point + 1).putString("lastDay", dayKey(now)).apply();
-                }
-                records.add(r);
-                saveRecords();
-                selectedDay = day;
-                paintBoard();
-                renderAll();
-                toast(msg != null ? msg : (retakeUri != null ? "點 " + point + " 已重拍" : "點 " + point + " 已存入相簿"));
-            });
-        });
-    }
-
-    private void clearPending() {
-        sp.edit().remove("pendingUri").remove("pendingDay").remove("pendingPoint").remove("pendingRetake").apply();
-    }
-
-    private Uri insertImage(String name, String day) {
-        ContentValues v = new ContentValues();
-        v.put(MediaStore.Images.Media.DISPLAY_NAME, name);
-        v.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
-        v.put(MediaStore.Images.Media.RELATIVE_PATH,
-                Environment.DIRECTORY_PICTURES + "/" + ALBUM + "/" + day.replace("-", ""));
-        try {
-            return getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, v);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private boolean hasContent(Uri uri) {
-        try (InputStream in = getContentResolver().openInputStream(uri)) {
-            return in != null && in.read() != -1;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private void deleteUri(Uri uri) {
-        try { getContentResolver().delete(uri, null, null); } catch (Exception ignored) { }
-    }
-
-    private String fileName(String day, int point) {
-        String pre = sp.getString("prefix", "").trim().replaceAll("[\\\\/:*?\"<>|]", "");
-        return (pre.isEmpty() ? "" : pre + "_") + day.replace("-", "")
-                + "_點" + String.format(Locale.US, "%02d", point) + ".jpg";
+        modeText.setText(store.isDaily() ? "隔日自動重置" : "僅手動重置");
     }
 
     // ---------- 分享 ----------
@@ -302,11 +161,9 @@ public class MainActivity extends Activity {
 
     // ---------- 清單 ----------
 
-    private void saveRecords() { sp.edit().putString("records", Record.toJsonList(records)).apply(); }
-
     /** 在相簿裡已被刪掉的照片，從紀錄中移除。 */
     private void pruneMissingThenRender() {
-        List<Record> snapshot = new ArrayList<>(records);
+        List<Record> snapshot = store.records();
         bg.execute(() -> {
             List<String> missing = new ArrayList<>();
             ContentResolver cr = getContentResolver();
@@ -320,9 +177,8 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> {
                 if (!missing.isEmpty()) {
                     List<Record> keep = new ArrayList<>();
-                    for (Record r : records) if (!missing.contains(r.uri)) keep.add(r);
-                    records = keep;
-                    saveRecords();
+                    for (Record r : store.records()) if (!missing.contains(r.uri)) keep.add(r);
+                    store.saveRecords(keep); // 觸發 prefListener 重畫
                 }
                 renderAll();
             });
@@ -330,10 +186,10 @@ public class MainActivity extends Activity {
     }
 
     private void renderAll() {
-        String today = dayKey(new Date());
+        String today = Store.dayKey(new Date());
         TreeSet<String> set = new TreeSet<>(Collections.reverseOrder());
         set.add(today);
-        for (Record r : records) set.add(r.day);
+        for (Record r : store.records()) set.add(r.day);
         days.clear();
         days.addAll(set);
         if (selectedDay == null || !days.contains(selectedDay)) selectedDay = today;
@@ -349,7 +205,7 @@ public class MainActivity extends Activity {
 
     private List<Record> sortedFor(String day) {
         List<Record> out = new ArrayList<>();
-        for (Record r : records) if (r.day.equals(day)) out.add(r);
+        for (Record r : store.records()) if (r.day.equals(day)) out.add(r);
         out.sort((a, b) -> a.point != b.point ? Integer.compare(a.point, b.point) : Long.compare(a.ts, b.ts));
         return out;
     }
@@ -399,9 +255,9 @@ public class MainActivity extends Activity {
         info.setOrientation(LinearLayout.VERTICAL);
         info.setPadding(dp(12), 0, dp(4), 0);
         TextView pt = new TextView(this);
-        pt.setText("點 " + r.point);
-        pt.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
-        pt.setTypeface(android.graphics.Typeface.create("sans-serif-condensed", android.graphics.Typeface.BOLD));
+        pt.setText(Store.label(r.point));
+        pt.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        pt.setTypeface(Typeface.create("sans-serif-condensed", Typeface.BOLD));
         pt.setTextColor(getColor(R.color.fg));
         TextView tm = new TextView(this);
         tm.setText(r.time);
@@ -411,15 +267,17 @@ public class MainActivity extends Activity {
         info.addView(tm);
         row.addView(info, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
-        row.addView(smallBtn("重拍", R.color.fg, v -> startCapture(r)));
+        row.addView(smallBtn("重拍", R.color.fg, v -> startActivity(new Intent(this, CameraActivity.class)
+                .putExtra(CameraActivity.EXTRA_RETAKE_URI, r.uri)
+                .putExtra(CameraActivity.EXTRA_RETAKE_POINT, r.point))));
         row.addView(smallBtn("刪除", R.color.danger, v -> new AlertDialog.Builder(this)
-                .setMessage("刪除 " + r.day + " 點 " + r.point + "？照片也會從手機相簿刪除。")
+                .setMessage("刪除 " + r.day + " " + Store.label(r.point) + "？照片也會從手機相簿刪除。")
                 .setNegativeButton("取消", null)
                 .setPositiveButton("刪除", (d, w) -> {
-                    deleteUri(uri);
-                    records.remove(r);
-                    saveRecords();
-                    renderAll();
+                    store.deleteUri(uri);
+                    List<Record> keep = new ArrayList<>();
+                    for (Record x : store.records()) if (!x.uri.equals(r.uri)) keep.add(x);
+                    store.saveRecords(keep);
                 })
                 .show()));
         return row;
@@ -445,17 +303,18 @@ public class MainActivity extends Activity {
     // ---------- 小工具 ----------
 
     private void bindText(EditText e, String key) {
-        e.setText(sp.getString(key, ""));
+        e.setText(store.sp.getString(key, ""));
         e.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
             @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
-            @Override public void afterTextChanged(Editable s) { sp.edit().putString(key, s.toString()).apply(); }
+            @Override public void afterTextChanged(Editable s) { store.sp.edit().putString(key, s.toString()).apply(); }
         });
     }
 
-    private static String dayKey(Date d) { return new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(d); }
-
-    private static String timeStr(Date d) { return new SimpleDateFormat("HH:mm:ss", Locale.US).format(d); }
+    private void bindCheck(CheckBox c, String key) {
+        c.setChecked(store.sp.getBoolean(key, true));
+        c.setOnCheckedChangeListener((b, on) -> store.sp.edit().putBoolean(key, on).apply());
+    }
 
     private int dp(int v) { return Math.round(v * getResources().getDisplayMetrics().density); }
 

@@ -17,7 +17,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.List;
 
-/** 把「點 N」、日期時間與工程名稱印在照片左下角，並把方向轉正後寫回原檔。 */
+/** 把「點號:N」、日期時間與工程名稱印在照片左下角，並把方向轉正後寫回原檔。 */
 final class Stamper {
     private static final int MAX_SIDE = 4096;
 
@@ -83,6 +83,7 @@ final class Stamper {
         }
     }
 
+    /** big 為 null 時不印點號，只印其他文字。 */
     private static void draw(Canvas c, int w, int h, String big, List<String> lines) {
         float u = Math.max(w, h) / 100f; // 長邊的 1%
         Paint bigP = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -93,21 +94,24 @@ final class Stamper {
         smallP.setTextSize(u * 2.4f);
         smallP.setColor(Color.WHITE);
 
-        float bw = bigP.measureText(big);
+        float bigH = big != null ? u * 6.2f : 0;
+        float bw = big != null ? bigP.measureText(big) : 0;
         for (String t : lines) bw = Math.max(bw, smallP.measureText(t));
         float pad = u * 1.6f;
         float lineH = u * 3.2f;
-        float bh = u * 5.5f + lines.size() * lineH + pad * 2;
+        float bh = bigH + lines.size() * lineH + pad * 2 - (lines.isEmpty() ? u * 0.7f : u * 0.6f);
         float x = u * 2, y = h - bh - u * 2;
 
         Paint bg = new Paint();
         bg.setColor(Color.argb(200, 20, 36, 30));
         c.drawRect(x, y, x + bw + pad * 2, y + bh, bg);
 
-        Paint.FontMetrics fm = bigP.getFontMetrics();
-        c.drawText(big, x + pad, y + pad - fm.ascent * 0.95f, bigP);
+        if (big != null) {
+            Paint.FontMetrics fm = bigP.getFontMetrics();
+            c.drawText(big, x + pad, y + pad - fm.ascent * 0.95f, bigP);
+        }
         Paint.FontMetrics sm = smallP.getFontMetrics();
-        float ty = y + pad + u * 6.2f;
+        float ty = y + pad + bigH;
         for (String t : lines) {
             c.drawText(t, x + pad, ty - sm.ascent * 0.9f, smallP);
             ty += lineH;

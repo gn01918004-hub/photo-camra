@@ -23,7 +23,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="下一張照片的點號"
+                android:text="下一張照片的點號（點數字可修改）"
                 android:textColor="@color/board_fg"
                 android:alpha="0.8"
                 android:textSize="13sp" />
@@ -34,27 +34,40 @@
                 android:gravity="bottom"
                 android:orientation="horizontal">
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="6dp"
-                    android:layout_marginBottom="10dp"
-                    android:text="點"
-                    android:textColor="@color/board_fg"
-                    android:textSize="34sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/nextNum"
+                <!-- 點一下可直接修改點號 -->
+                <LinearLayout
+                    android:id="@+id/pointBox"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:fontFamily="sans-serif-condensed"
-                    android:includeFontPadding="false"
-                    android:text="1"
-                    android:textColor="@color/board_fg"
-                    android:textSize="84sp"
-                    android:textStyle="bold" />
+                    android:background="?android:attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:contentDescription="點一下修改點號"
+                    android:focusable="true"
+                    android:gravity="bottom"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="4dp"
+                        android:layout_marginBottom="10dp"
+                        android:text="點號:"
+                        android:textColor="@color/board_fg"
+                        android:textSize="28sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/nextNum"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-condensed"
+                        android:includeFontPadding="false"
+                        android:text="1"
+                        android:textColor="@color/board_fg"
+                        android:textSize="84sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
 
                 <LinearLayout
                     android:layout_width="wrap_content"
@@ -116,7 +129,7 @@
             android:layout_marginTop="16dp"
             android:background="@drawable/bg_shoot"
             android:stateListAnimator="@null"
-            android:text="拍照 · 點 1"
+            android:text="拍照 · 點號:1"
             android:textColor="@color/accent_fg"
             android:textSize="22sp"
             android:textStyle="bold" />
@@ -134,7 +147,7 @@
                 android:layout_weight="1"
                 android:background="@drawable/bg_btn"
                 android:stateListAnimator="@null"
-                android:text="手動重置為點 1"
+                android:text="點號重置為 1"
                 android:textColor="@color/danger" />
 
             <Button
@@ -178,7 +191,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:minHeight="44dp"
-                    android:text="隔日自動重置（每天從點 1 開始）"
+                    android:text="隔日自動重置（每天從點號:1 開始）"
                     android:textColor="@color/fg" />
 
                 <RadioButton
@@ -211,7 +224,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
-                android:text="檔名前綴（可留空）"
+                android:text="檔名前綴（可留空；預設檔名就是點號，如 3.jpg，加前綴則為 A區_3.jpg）"
                 android:textColor="@color/muted"
                 android:textSize="13sp" />
 
@@ -225,12 +238,20 @@
                 android:textColor="@color/fg" />
 
             <CheckBox
-                android:id="@+id/stampOn"
+                android:id="@+id/stampPoint"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:minHeight="44dp"
-                android:text="在照片上印點號與時間"
+                android:text="在照片上印點號"
+                android:textColor="@color/fg" />
+
+            <CheckBox
+                android:id="@+id/stampTime"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="44dp"
+                android:text="在照片上印日期時間"
                 android:textColor="@color/fg" />
 
             <TextView
@@ -283,7 +304,7 @@
             android:layout_marginTop="12dp"
             android:gravity="center"
             android:padding="18dp"
-            android:text="還沒有照片。按上方「拍照」會直接打開相機，照片依序記為點 1、點 2、點 3…"
+            android:text="還沒有照片。按上方「拍照」會直接打開相機，照片依序記為點號:1、2、3…"
             android:textColor="@color/muted" />
 
         <LinearLayout

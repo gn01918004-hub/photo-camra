@@ -20,7 +20,12 @@ jobs:
         run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace
+          ./gradlew assembleRelease 2>&1 | tee build.log
+          exit ${PIPESTATUS[0]}
+      - name: 回報編譯錯誤
+        if: failure()
+        run: |
+          grep -E "error:|ERROR|FAILED|What went wrong" -A3 build.log | head -40 | while IFS= read -r line; do echo "::error::$line"; done
       - uses: actions/upload-artifact@v5
         with:
           name: PointCam-apk
