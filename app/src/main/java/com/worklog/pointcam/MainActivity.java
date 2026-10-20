@@ -45,7 +45,7 @@ public class MainActivity extends Activity {
     private final ExecutorService bg = Executors.newSingleThreadExecutor();
 
     private TextView nextNum, todayText, modeText, dayCount, emptyText;
-    private Button shootBtn, shareBtn;
+    private Button shootBtn, shareBtn, deleteDayBtn;
     private LinearLayout settingsPanel, photoList;
     private Spinner daySpinner;
 
@@ -72,6 +72,7 @@ public class MainActivity extends Activity {
         emptyText = findViewById(R.id.emptyText);
         shootBtn = findViewById(R.id.shootBtn);
         shareBtn = findViewById(R.id.shareBtn);
+        deleteDayBtn = findViewById(R.id.deleteDayBtn);
         settingsPanel = findViewById(R.id.settingsPanel);
         photoList = findViewById(R.id.photoList);
         daySpinner = findViewById(R.id.daySpinner);
@@ -88,6 +89,7 @@ public class MainActivity extends Activity {
         findViewById(R.id.settingsBtn).setOnClickListener(v -> settingsPanel.setVisibility(
                 settingsPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
         shareBtn.setOnClickListener(v -> shareDay(selectedDay));
+        deleteDayBtn.setOnClickListener(v -> confirmDeleteDay(selectedDay));
 
         RadioGroup modeGroup = findViewById(R.id.modeGroup);
         modeGroup.check(store.isDaily() ? R.id.modeDaily : R.id.modeManual);
@@ -159,6 +161,37 @@ public class MainActivity extends Activity {
         startActivity(Intent.createChooser(s, "分享 " + day + " 的 " + uris.size() + " 張照片"));
     }
 
+    // ---------- 刪除整天 ----------
+
+    private void confirmDeleteDay(String day) {
+        List<Record> list = sortedFor(day);
+        if (list.isEmpty()) { toast("這天沒有照片"); return; }
+        new AlertDialog.Builder(this)
+                .setTitle("刪除 " + day + " 的全部照片？")
+                .setMessage("共 " + list.size() + " 張，會一併從手機相簿刪除，無法復原。")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("全部刪除", (d, w) -> deleteDay(day, list))
+                .show();
+    }
+
+    private void deleteDay(String day, List<Record> list) {
+        deleteDayBtn.setEnabled(false);
+        bg.execute(() -> {
+            List<String> gone = new ArrayList<>();
+            for (Record r : list) {
+                store.deleteUri(Uri.parse(r.uri));
+                gone.add(r.uri);
+            }
+            runOnUiThread(() -> {
+                List<Record> keep = new ArrayList<>();
+                for (Record x : store.records()) if (!gone.contains(x.uri)) keep.add(x);
+                store.saveRecords(keep);
+                deleteDayBtn.setEnabled(true);
+                toast("已刪除 " + day + " 的 " + gone.size() + " 張照片");
+            });
+        });
+    }
+
     // ---------- 清單 ----------
 
     /** 在相簿裡已被刪掉的照片，從紀錄中移除。 */
@@ -215,6 +248,7 @@ public class MainActivity extends Activity {
         dayCount.setText(list.size() + " 張");
         shareBtn.setEnabled(!list.isEmpty());
         shareBtn.setAlpha(list.isEmpty() ? 0.5f : 1f);
+        deleteDayBtn.setVisibility(list.isEmpty() ? View.GONE : View.VISIBLE);
         emptyText.setVisibility(list.isEmpty() ? View.VISIBLE : View.GONE);
         photoList.removeAllViews();
         for (Record r : list) photoList.addView(row(r));
