@@ -1,165 +1,322 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/scroll"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg"
     android:fitsSystemWindows="true">
 
     <LinearLayout
+        android:id="@+id/root"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:animateLayoutChanges="true"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:paddingHorizontal="18dp"
+        android:paddingTop="14dp"
+        android:paddingBottom="36dp">
 
-        <!-- 點號看板 -->
+        <!-- 頂列：日期與設定 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_board"
-            android:orientation="vertical"
-            android:paddingHorizontal="18dp"
-            android:paddingVertical="14dp">
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-            <TextView
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="下一張照片的點號（點數字可修改）"
-                android:textColor="@color/board_fg"
-                android:alpha="0.8"
-                android:textSize="13sp" />
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:letterSpacing="0.18"
+                    android:text="點號拍照 · 工作紀錄"
+                    android:textColor="@color/muted"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/todayText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="10月21日 星期三"
+                    android:textColor="@color/fg"
+                    android:textSize="24sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <ImageButton
+                android:id="@+id/settingsBtn"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_icon_btn"
+                android:contentDescription="設定"
+                android:src="@drawable/ic_tune"
+                android:stateListAnimator="@animator/press_scale"
+                android:tint="@color/fg" />
+        </LinearLayout>
+
+        <!-- 主卡：目前點號 -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/bg_hero"
+            android:clipToOutline="true"
+            android:elevation="6dp">
+
+            <com.worklog.pointcam.BlueprintView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="bottom"
-                android:orientation="horizontal">
+                android:orientation="vertical"
+                android:padding="22dp">
 
-                <!-- 點一下可直接修改點號 -->
                 <LinearLayout
-                    android:id="@+id/pointBox"
-                    android:layout_width="0dp"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:background="?android:attr/selectableItemBackground"
-                    android:clickable="true"
-                    android:contentDescription="點一下修改點號"
-                    android:focusable="true"
-                    android:gravity="bottom"
+                    android:gravity="center_vertical"
                     android:orientation="horizontal">
 
                     <TextView
-                        android:layout_width="wrap_content"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginEnd="4dp"
-                        android:layout_marginBottom="10dp"
-                        android:text="點號:"
-                        android:textColor="@color/board_fg"
-                        android:textSize="28sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/nextNum"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif-condensed"
-                        android:includeFontPadding="false"
-                        android:text="1"
-                        android:textColor="@color/board_fg"
-                        android:textSize="84sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:gravity="end"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:id="@+id/todayText"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:textColor="@color/board_fg"
+                        android:layout_weight="1"
+                        android:letterSpacing="0.16"
+                        android:text="下一個點號"
+                        android:textColor="@color/hero_fg"
+                        android:alpha="0.75"
                         android:textSize="13sp" />
 
                     <TextView
                         android:id="@+id/modeText"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginBottom="6dp"
-                        android:textColor="@color/board_fg"
-                        android:alpha="0.85"
-                        android:textSize="13sp" />
+                        android:background="@drawable/bg_glass_pill"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="5dp"
+                        android:text="隔日自動重置"
+                        android:textColor="@color/hero_fg"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <!-- 點一下可直接修改點號 -->
+                    <LinearLayout
+                        android:id="@+id/pointBox"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:contentDescription="點一下修改點號"
+                        android:focusable="true"
+                        android:gravity="bottom"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="2dp"
+                            android:layout_marginBottom="18dp"
+                            android:text="點號:"
+                            android:textColor="@color/amber"
+                            android:textSize="24sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/nextNum"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/barlow_bold"
+                            android:includeFontPadding="false"
+                            android:text="1"
+                            android:textColor="@color/hero_fg"
+                            android:textSize="112sp" />
+                    </LinearLayout>
 
                     <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal">
+                        android:orientation="vertical">
 
-                        <Button
-                            android:id="@+id/minusBtn"
-                            android:layout_width="44dp"
-                            android:layout_height="44dp"
-                            android:layout_marginEnd="8dp"
-                            android:background="@drawable/bg_step"
-                            android:contentDescription="點號減一"
-                            android:text="−"
-                            android:textColor="@color/board_fg"
-                            android:textSize="22sp" />
-
-                        <Button
+                        <ImageButton
                             android:id="@+id/plusBtn"
-                            android:layout_width="44dp"
-                            android:layout_height="44dp"
-                            android:background="@drawable/bg_step"
+                            android:layout_width="52dp"
+                            android:layout_height="52dp"
+                            android:background="@drawable/bg_glass"
                             android:contentDescription="點號加一"
-                            android:text="＋"
-                            android:textColor="@color/board_fg"
-                            android:textSize="22sp" />
+                            android:src="@drawable/ic_plus"
+                            android:stateListAnimator="@animator/press_scale"
+                            android:tint="@color/hero_fg" />
+
+                        <ImageButton
+                            android:id="@+id/minusBtn"
+                            android:layout_width="52dp"
+                            android:layout_height="52dp"
+                            android:layout_marginTop="10dp"
+                            android:background="@drawable/bg_glass"
+                            android:contentDescription="點號減一"
+                            android:src="@drawable/ic_minus"
+                            android:stateListAnimator="@animator/press_scale"
+                            android:tint="@color/hero_fg" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/heroHint"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="輕觸數字可直接修改"
+                        android:textColor="@color/hero_fg"
+                        android:alpha="0.6"
+                        android:textSize="12sp" />
+
+                    <LinearLayout
+                        android:id="@+id/resetBtn"
+                        android:layout_width="wrap_content"
+                        android:layout_height="38dp"
+                        android:background="@drawable/bg_glass"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="12dp"
+                        android:stateListAnimator="@animator/press_scale">
+
+                        <ImageView
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:layout_marginEnd="6dp"
+                            android:src="@drawable/ic_reset"
+                            android:tint="@color/hero_fg" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="重置為 1"
+                            android:textColor="@color/hero_fg"
+                            android:textSize="13sp" />
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
-        </LinearLayout>
+        </FrameLayout>
 
-        <!-- 拍照 -->
-        <Button
-            android:id="@+id/shootBtn"
-            android:layout_width="match_parent"
-            android:layout_height="84dp"
-            android:layout_marginTop="16dp"
-            android:background="@drawable/bg_shoot"
-            android:stateListAnimator="@null"
-            android:text="拍照 · 點號:1"
-            android:textColor="@color/accent_fg"
-            android:textSize="22sp"
-            android:textStyle="bold" />
-
+        <!-- 兩個拍照按鈕並排 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="14dp"
             android:orientation="horizontal">
 
-            <Button
-                android:id="@+id/resetBtn"
+            <LinearLayout
+                android:id="@+id/shootBtn"
                 android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:background="@drawable/bg_btn"
-                android:stateListAnimator="@null"
-                android:text="點號重置為 1"
-                android:textColor="@color/danger" />
+                android:layout_height="88dp"
+                android:layout_weight="1.35"
+                android:background="@drawable/bg_primary"
+                android:clickable="true"
+                android:elevation="4dp"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="18dp"
+                android:stateListAnimator="@animator/press_scale">
 
-            <Button
-                android:id="@+id/settingsBtn"
+                <ImageView
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:src="@drawable/ic_camera"
+                    android:tint="@color/amber_fg" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="拍照"
+                        android:textColor="@color/amber_fg"
+                        android:textSize="21sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/shootSub"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:alpha="0.75"
+                        android:text="點號:1"
+                        android:textColor="@color/amber_fg"
+                        android:textSize="14sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/resultBtn"
                 android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_marginStart="8dp"
+                android:layout_height="88dp"
+                android:layout_marginStart="12dp"
                 android:layout_weight="1"
-                android:background="@drawable/bg_btn"
-                android:stateListAnimator="@null"
-                android:text="設定"
-                android:textColor="@color/fg" />
+                android:background="@drawable/bg_secondary"
+                android:clickable="true"
+                android:elevation="4dp"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="16dp"
+                android:stateListAnimator="@animator/press_scale">
+
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/ic_trophy"
+                    android:tint="@color/amber" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="成果圖"
+                        android:textColor="@color/hero_fg"
+                        android:textSize="19sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:alpha="0.65"
+                        android:text="不加註記"
+                        android:textColor="@color/hero_fg"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </LinearLayout>
         </LinearLayout>
 
         <!-- 設定 -->
@@ -167,161 +324,231 @@
             android:id="@+id/settingsPanel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:background="@drawable/bg_panel"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_card"
             android:orientation="vertical"
-            android:padding="16dp"
+            android:padding="20dp"
             android:visibility="gone">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="重置方式"
-                android:textColor="@color/muted"
-                android:textSize="13sp" />
+                android:text="設定"
+                android:textColor="@color/fg"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                style="@style/SettingLabel"
+                android:text="重置方式" />
 
             <RadioGroup
                 android:id="@+id/modeGroup"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical">
+                style="@style/Seg">
 
                 <RadioButton
                     android:id="@+id/modeDaily"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:minHeight="44dp"
-                    android:text="隔日自動重置（每天從點號:1 開始）"
-                    android:textColor="@color/fg" />
+                    style="@style/SegItem"
+                    android:text="隔日自動重置" />
 
                 <RadioButton
                     android:id="@+id/modeManual"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:minHeight="44dp"
-                    android:text="僅手動重置（點號一直累加）"
-                    android:textColor="@color/fg" />
+                    style="@style/SegItem"
+                    android:text="僅手動重置" />
             </RadioGroup>
 
             <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:text="工程名稱（印在照片上，可留空）"
-                android:textColor="@color/muted"
-                android:textSize="13sp" />
+                style="@style/SettingLabel"
+                android:text="照片大小" />
+
+            <RadioGroup
+                android:id="@+id/sizeGroup"
+                style="@style/Seg">
+
+                <RadioButton
+                    android:id="@+id/sizeSmall"
+                    style="@style/SegItem"
+                    android:text="小・好上傳" />
+
+                <RadioButton
+                    android:id="@+id/sizeMedium"
+                    style="@style/SegItem"
+                    android:text="中" />
+
+                <RadioButton
+                    android:id="@+id/sizeOriginal"
+                    style="@style/SegItem"
+                    android:text="原始" />
+            </RadioGroup>
+
+            <TextView
+                android:id="@+id/sizeNote"
+                style="@style/SettingNote"
+                android:text="長邊 1600 像素，每張約 0.3–0.5 MB，文字與現場細節仍清楚可辨。" />
+
+            <TextView
+                style="@style/SettingLabel"
+                android:text="照片上的註記（成果圖不會加）" />
+
+            <Switch
+                android:id="@+id/stampPoint"
+                style="@style/SettingSwitch"
+                android:text="印點號" />
+
+            <Switch
+                android:id="@+id/stampTime"
+                style="@style/SettingSwitch"
+                android:text="印日期時間" />
+
+            <TextView
+                style="@style/SettingLabel"
+                android:text="工程名稱（印在點號照片上，可留空）" />
 
             <EditText
                 android:id="@+id/projName"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="例：○○路排水改善工程"
-                android:importantForAutofill="no"
-                android:inputType="text"
-                android:textColor="@color/fg" />
+                style="@style/SettingInput"
+                android:hint="例：○○路排水改善工程" />
 
             <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:text="檔名前綴（可留空；預設檔名就是點號，如 3.jpg，加前綴則為 A區_3.jpg）"
-                android:textColor="@color/muted"
-                android:textSize="13sp" />
+                style="@style/SettingLabel"
+                android:text="檔名前綴（可留空）" />
 
             <EditText
                 android:id="@+id/prefix"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="例：A區"
-                android:importantForAutofill="no"
-                android:inputType="text"
-                android:textColor="@color/fg" />
-
-            <CheckBox
-                android:id="@+id/stampPoint"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:minHeight="44dp"
-                android:text="在照片上印點號"
-                android:textColor="@color/fg" />
-
-            <CheckBox
-                android:id="@+id/stampTime"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:minHeight="44dp"
-                android:text="在照片上印日期時間"
-                android:textColor="@color/fg" />
+                style="@style/SettingInput"
+                android:hint="例：A區" />
 
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="照片會直接存進手機相簿：Pictures/工作照片/日期 資料夾。"
-                android:textColor="@color/muted"
-                android:textSize="12sp" />
+                style="@style/SettingNote"
+                android:text="點號照片檔名為點號（3.jpg），成果圖為日期（20261021.jpg）；有前綴則為 A區_3.jpg。全部存在相簿 Pictures/工作照片/日期 資料夾。" />
         </LinearLayout>
 
-        <!-- 照片清單 -->
+        <!-- 照片紀錄 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:gravity="center_vertical"
+            android:layout_marginTop="28dp"
+            android:gravity="bottom"
             android:orientation="horizontal">
 
-            <Spinner
-                android:id="@+id/daySpinner"
+            <TextView
                 android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1" />
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="照片紀錄"
+                android:textColor="@color/fg"
+                android:textSize="20sp"
+                android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/dayCount"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
                 android:textColor="@color/muted"
                 android:textSize="13sp" />
         </LinearLayout>
 
-        <Button
-            android:id="@+id/shareBtn"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:layout_marginTop="8dp"
-            android:background="@drawable/bg_btn"
-            android:stateListAnimator="@null"
-            android:text="分享這天的全部照片"
-            android:textColor="@color/fg"
-            android:textStyle="bold" />
-
-        <Button
-            android:id="@+id/deleteDayBtn"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginTop="8dp"
-            android:background="@drawable/bg_btn"
-            android:stateListAnimator="@null"
-            android:text="刪除這天的全部照片"
-            android:textColor="@color/danger" />
-
-        <TextView
-            android:id="@+id/emptyText"
+        <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginHorizontal="-18dp"
             android:layout_marginTop="12dp"
-            android:gravity="center"
-            android:padding="18dp"
-            android:text="還沒有照片。按上方「拍照」會直接打開相機，照片依序記為點號:1、2、3…"
-            android:textColor="@color/muted" />
+            android:clipToPadding="false"
+            android:paddingHorizontal="18dp"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/dayChips"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
 
         <LinearLayout
-            android:id="@+id/photoList"
+            android:id="@+id/dayActions"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="14dp"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:id="@+id/shareBtn"
+                style="@style/PillBtn"
+                android:layout_weight="1.4"
+                android:background="@drawable/bg_pill_dark">
+
+                <ImageView
+                    style="@style/PillIcon"
+                    android:src="@drawable/ic_share"
+                    android:tint="@color/sel_fg" />
+
+                <TextView
+                    android:id="@+id/shareText"
+                    style="@style/PillText"
+                    android:text="分享全部"
+                    android:textColor="@color/sel_fg" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/deleteDayBtn"
+                style="@style/PillBtn"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_pill_danger">
+
+                <ImageView
+                    style="@style/PillIcon"
+                    android:src="@drawable/ic_delete"
+                    android:tint="@color/danger" />
+
+                <TextView
+                    style="@style/PillText"
+                    android:text="刪除全部"
+                    android:textColor="@color/danger" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/emptyBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_card"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingHorizontal="24dp"
+            android:paddingVertical="32dp">
+
+            <ImageView
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:src="@drawable/ic_photos"
+                android:tint="@color/muted" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="這天還沒有照片"
+                android:textColor="@color/fg"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center"
+                android:text="按「拍照」連續拍攝，照片依序記為點號:1、2、3…\n完工時按「成果圖」拍不加註記的照片。"
+                android:textColor="@color/muted"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/photoGrid"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
             android:orientation="vertical" />
     </LinearLayout>
 </ScrollView>

@@ -9,27 +9,34 @@ import java.util.List;
 
 /** 一張已拍照片的紀錄：存在哪裡、哪一天、第幾點、幾點拍的。 */
 final class Record {
+    static final String POINT = "point";
+    static final String RESULT = "result";
+
     String uri;
+    String kind = POINT; // 點號照片或成果圖
     String day;   // yyyy-MM-dd
-    int point;
+    int point;    // 點號；成果圖則為當天第幾張
     String time;  // HH:mm:ss
     long ts;
 
     JSONObject toJson() throws JSONException {
         return new JSONObject()
-                .put("uri", uri).put("day", day).put("point", point)
+                .put("uri", uri).put("kind", kind).put("day", day).put("point", point)
                 .put("time", time).put("ts", ts);
     }
 
     static Record fromJson(JSONObject o) {
         Record r = new Record();
         r.uri = o.optString("uri");
+        r.kind = o.optString("kind", POINT);
         r.day = o.optString("day");
         r.point = o.optInt("point");
         r.time = o.optString("time");
         r.ts = o.optLong("ts");
         return r;
     }
+
+    boolean isResult() { return RESULT.equals(kind); }
 
     static List<Record> parseList(String json) {
         List<Record> out = new ArrayList<>();

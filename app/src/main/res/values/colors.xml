@@ -1,13 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg">#EEF1EE</color>
+    <!-- 版面：測量藍圖風的深綠主卡 + 工地安全橘的主要按鈕 -->
+    <color name="bg">#EFF2EE</color>
     <color name="surface">#FFFFFF</color>
-    <color name="fg">#1D2622</color>
-    <color name="muted">#5D6B64</color>
-    <color name="line">#D3DAD5</color>
-    <color name="board">#24443A</color>
-    <color name="board_fg">#F3F6F1</color>
-    <color name="accent">#E8771E</color>
-    <color name="accent_fg">#FFFFFF</color>
-    <color name="danger">#B3342B</color>
+    <color name="surface2">#E3E9E5</color>
+    <color name="fg">#111C17</color>
+    <color name="muted">#5F6E67</color>
+    <color name="line">#D6DED9</color>
+    <color name="ink">#0B241E</color>
+    <color name="ink2">#1D4C3F</color>
+    <color name="hero_fg">#F1F6F2</color>
+    <color name="amber">#FFB547</color>
+    <color name="amber2">#F07A2A</color>
+    <color name="amber_fg">#1E1205</color>
+    <color name="danger">#C23B2B</color>
+    <color name="sel_bg">#111C17</color>
+    <color name="sel_fg">#FFFFFF</color>
 </resources>

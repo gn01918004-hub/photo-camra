@@ -14,102 +14,158 @@
         android:id="@+id/flash"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#FFFFFF"
-        android:alpha="0" />
+        android:alpha="0"
+        android:background="#FFFFFF" />
 
-    <!-- 上方：返回、目前點號、修改點號 -->
+    <!-- 上方：返回、修改點號、目前點號 -->
     <LinearLayout
-        android:id="@+id/topBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="top"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:padding="12dp">
+        android:padding="14dp">
 
-        <Button
+        <ImageButton
             android:id="@+id/backBtn"
-            android:layout_width="wrap_content"
-            android:layout_height="44dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:background="@drawable/bg_cam_chip"
-            android:minWidth="0dp"
-            android:paddingHorizontal="14dp"
-            android:stateListAnimator="@null"
-            android:text="‹ 返回"
-            android:textColor="#FFFFFF"
-            android:textSize="15sp" />
+            android:contentDescription="返回"
+            android:src="@drawable/ic_back"
+            android:stateListAnimator="@animator/press_scale"
+            android:tint="#FFFFFF" />
 
         <View
             android:layout_width="0dp"
             android:layout_height="1dp"
             android:layout_weight="1" />
 
-        <Button
+        <LinearLayout
             android:id="@+id/editPointBtn"
             android:layout_width="wrap_content"
-            android:layout_height="44dp"
-            android:layout_marginEnd="8dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="10dp"
             android:background="@drawable/bg_cam_chip"
-            android:minWidth="0dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
             android:paddingHorizontal="14dp"
-            android:stateListAnimator="@null"
-            android:text="修改點號"
-            android:textColor="#FFFFFF"
-            android:textSize="15sp" />
+            android:stateListAnimator="@animator/press_scale">
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_marginEnd="6dp"
+                android:src="@drawable/ic_edit"
+                android:tint="#FFFFFF" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="修改點號"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/pointBadge"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:background="@drawable/bg_cam_badge"
-            android:paddingHorizontal="14dp"
-            android:paddingVertical="4dp"
+            android:fontFamily="@font/barlow_bold"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="2dp"
             android:text="點號:1"
-            android:textColor="#FFD25A"
-            android:textSize="28sp"
-            android:textStyle="bold" />
+            android:textColor="#FFB547"
+            android:textSize="34sp" />
     </LinearLayout>
 
-    <!-- 下方：最近一張、快門、今日張數 -->
+    <!-- 下方：模式切換、最近一張、快門、今日張數 -->
     <LinearLayout
-        android:id="@+id/bottomBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="24dp"
-        android:paddingVertical="20dp">
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingBottom="22dp">
 
-        <ImageView
-            android:id="@+id/lastThumb"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            android:background="@drawable/bg_cam_chip"
-            android:contentDescription="最近一張"
-            android:scaleType="centerCrop" />
-
-        <FrameLayout
-            android:layout_width="0dp"
+        <RadioGroup
+            android:id="@+id/camModeGroup"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1">
+            android:background="@drawable/bg_cam_seg"
+            android:orientation="horizontal"
+            android:padding="4dp">
 
-            <Button
-                android:id="@+id/shutterBtn"
-                android:layout_width="78dp"
-                android:layout_height="78dp"
-                android:layout_gravity="center"
-                android:background="@drawable/bg_shutter"
-                android:contentDescription="拍照"
-                android:stateListAnimator="@null" />
-        </FrameLayout>
+            <RadioButton
+                android:id="@+id/camModePoint"
+                android:layout_width="wrap_content"
+                android:layout_height="38dp"
+                android:background="@drawable/bg_cam_seg_item"
+                android:button="@null"
+                android:gravity="center"
+                android:paddingHorizontal="18dp"
+                android:text="點號照片"
+                android:textColor="@color/cam_seg_text"
+                android:textSize="14sp"
+                android:textStyle="bold" />
 
-        <TextView
-            android:id="@+id/countText"
-            android:layout_width="56dp"
+            <RadioButton
+                android:id="@+id/camModeResult"
+                android:layout_width="wrap_content"
+                android:layout_height="38dp"
+                android:background="@drawable/bg_cam_seg_item"
+                android:button="@null"
+                android:gravity="center"
+                android:paddingHorizontal="18dp"
+                android:text="成果圖"
+                android:textColor="@color/cam_seg_text"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+        </RadioGroup>
+
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center"
-            android:textColor="#FFFFFF"
-            android:textSize="13sp" />
+            android:layout_marginTop="18dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="28dp">
+
+            <ImageView
+                android:id="@+id/lastThumb"
+                android:layout_width="58dp"
+                android:layout_height="58dp"
+                android:background="@drawable/bg_thumb"
+                android:clipToOutline="true"
+                android:contentDescription="最近一張"
+                android:scaleType="centerCrop" />
+
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1">
+
+                <Button
+                    android:id="@+id/shutterBtn"
+                    android:layout_width="84dp"
+                    android:layout_height="84dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/bg_shutter"
+                    android:contentDescription="拍照"
+                    android:stateListAnimator="@animator/press_scale" />
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/countText"
+                android:layout_width="58dp"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:lineSpacingExtra="2dp"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp" />
+        </LinearLayout>
     </LinearLayout>
 </FrameLayout>

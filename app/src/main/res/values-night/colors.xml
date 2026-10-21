@@ -1,13 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg">#131A17</color>
-    <color name="surface">#1C2622</color>
-    <color name="fg">#E6ECE8</color>
-    <color name="muted">#9AA9A1</color>
-    <color name="line">#2F3D37</color>
-    <color name="board">#2C5446</color>
-    <color name="board_fg">#F3F6F1</color>
-    <color name="accent">#F08A35</color>
-    <color name="accent_fg">#1A120A</color>
-    <color name="danger">#E26357</color>
+    <color name="bg">#090E0C</color>
+    <color name="surface">#121A17</color>
+    <color name="surface2">#1B2622</color>
+    <color name="fg">#E8EFEA</color>
+    <color name="muted">#8D9C94</color>
+    <color name="line">#24312B</color>
+    <color name="ink">#0F2E26</color>
+    <color name="ink2">#21594A</color>
+    <color name="hero_fg">#F1F6F2</color>
+    <color name="amber">#FFB547</color>
+    <color name="amber2">#F07A2A</color>
+    <color name="amber_fg">#1E1205</color>
+    <color name="danger">#F0705C</color>
+    <color name="sel_bg">#E8EFEA</color>
+    <color name="sel_fg">#0B110F</color>
 </resources>

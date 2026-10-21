@@ -1,6 +1,5 @@
 package com.worklog.pointcam;
 
-import android.content.ContentResolver;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
@@ -9,78 +8,75 @@ import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.media.ExifInterface;
-import android.net.Uri;
-import android.os.ParcelFileDescriptor;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.util.List;
 
-/** 把「點號:N」、日期時間與工程名稱印在照片左下角，並把方向轉正後寫回原檔。 */
+/**
+ * 把相機拍到的 JPEG 縮小到指定長邊、轉正方向，依需要在左下角印上
+ * 「點號:N」、日期時間與工程名稱，再重新壓縮。
+ */
 final class Stamper {
-    private static final int MAX_SIDE = 4096;
 
-    static void stamp(ContentResolver cr, Uri uri, String big, List<String> lines, String exifDateTime)
+    /**
+     * @param big     點號文字；null 表示不印
+     * @param lines   點號下方的小字；可為空
+     * @param maxSide 長邊像素上限；0 表示維持原尺寸
+     */
+    static byte[] encode(byte[] jpeg, String big, List<String> lines, int maxSide, int quality)
             throws IOException {
+        boolean stamp = big != null || !lines.isEmpty();
+
         BitmapFactory.Options bounds = new BitmapFactory.Options();
         bounds.inJustDecodeBounds = true;
-        try (InputStream in = cr.openInputStream(uri)) {
-            BitmapFactory.decodeStream(in, null, bounds);
-        }
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw new IOException("empty image");
+        BitmapFactory.decodeByteArray(jpeg, 0, jpeg.length, bounds);
+        int srcLong = Math.max(bounds.outWidth, bounds.outHeight);
+        if (srcLong <= 0) throw new IOException("empty image");
+        int target = maxSide > 0 ? Math.min(maxSide, srcLong) : srcLong;
+        if (!stamp && target == srcLong && maxSide == 0) return jpeg; // 原始且不印字：原檔保存
 
+        // 先用 inSampleSize 粗縮（省記憶體），再精確縮到目標長邊
         int sample = 1;
-        while (Math.max(bounds.outWidth, bounds.outHeight) / sample > MAX_SIDE) sample *= 2;
+        while (srcLong / (sample * 2) >= target) sample *= 2;
         BitmapFactory.Options opts = new BitmapFactory.Options();
         opts.inSampleSize = sample;
-        Bitmap bmp;
-        try (InputStream in = cr.openInputStream(uri)) {
-            bmp = BitmapFactory.decodeStream(in, null, opts);
-        }
+        Bitmap bmp = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.length, opts);
         if (bmp == null) throw new IOException("decode failed");
 
         int orientation = ExifInterface.ORIENTATION_NORMAL;
-        try (InputStream in = cr.openInputStream(uri)) {
-            orientation = new ExifInterface(in).getAttributeInt(
+        try {
+            orientation = new ExifInterface(new ByteArrayInputStream(jpeg)).getAttributeInt(
                     ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
         } catch (IOException ignored) {
         }
         int deg = orientation == ExifInterface.ORIENTATION_ROTATE_90 ? 90
                 : orientation == ExifInterface.ORIENTATION_ROTATE_180 ? 180
                 : orientation == ExifInterface.ORIENTATION_ROTATE_270 ? 270 : 0;
-        if (deg != 0) {
-            Matrix m = new Matrix();
-            m.postRotate(deg);
+
+        float scale = (float) target / Math.max(bmp.getWidth(), bmp.getHeight());
+        Matrix m = new Matrix();
+        if (scale < 0.999f) m.postScale(scale, scale);
+        if (deg != 0) m.postRotate(deg);
+        if (!m.isIdentity()) {
             Bitmap r = Bitmap.createBitmap(bmp, 0, 0, bmp.getWidth(), bmp.getHeight(), m, true);
             if (r != bmp) bmp.recycle();
             bmp = r;
         }
-        if (!bmp.isMutable()) {
-            Bitmap c = bmp.copy(Bitmap.Config.ARGB_8888, true);
-            bmp.recycle();
-            bmp = c;
-        }
-
-        draw(new Canvas(bmp), bmp.getWidth(), bmp.getHeight(), big, lines);
-
-        try (OutputStream out = cr.openOutputStream(uri, "wt")) {
-            if (out == null) throw new IOException("cannot write");
-            bmp.compress(Bitmap.CompressFormat.JPEG, 90, out);
-        } finally {
-            bmp.recycle();
-        }
-
-        // 重新寫檔會遺失 EXIF，補回拍攝時間讓相簿排序正確
-        try (ParcelFileDescriptor pfd = cr.openFileDescriptor(uri, "rw")) {
-            if (pfd != null) {
-                ExifInterface exif = new ExifInterface(pfd.getFileDescriptor());
-                exif.setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, exifDateTime);
-                exif.setAttribute(ExifInterface.TAG_DATETIME, exifDateTime);
-                exif.saveAttributes();
+        if (stamp) {
+            if (!bmp.isMutable()) {
+                Bitmap c = bmp.copy(Bitmap.Config.ARGB_8888, true);
+                bmp.recycle();
+                bmp = c;
             }
-        } catch (Exception ignored) {
+            draw(new Canvas(bmp), bmp.getWidth(), bmp.getHeight(), big, lines);
         }
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream(jpeg.length / 3);
+        bmp.compress(Bitmap.CompressFormat.JPEG, quality, out);
+        bmp.recycle();
+        return out.toByteArray();
     }
 
     /** big 為 null 時不印點號，只印其他文字。 */

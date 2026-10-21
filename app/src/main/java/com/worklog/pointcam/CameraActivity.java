@@ -29,6 +29,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -38,17 +39,23 @@ import java.util.Date;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** App 內的拍照畫面：連續拍照，右上角顯示目前點號，按返回才回主畫面。 */
+/**
+ * App 內的拍照畫面：連續拍照，右上角顯示目前點號，按返回才回主畫面。
+ * 可切換「成果圖」模式：不印註記、不跳點號，檔名為日期。
+ */
 public class CameraActivity extends Activity implements TextureView.SurfaceTextureListener {
     static final String EXTRA_RETAKE_URI = "retakeUri";
     static final String EXTRA_RETAKE_POINT = "retakePoint";
+    static final String EXTRA_MODE = "mode"; // "result" 為成果圖
     private static final int REQ_PERM = 10;
 
     private Store store;
     private TextureView preview;
     private TextView badge, countText;
     private ImageView lastThumb;
-    private Button shutter, editPointBtn;
+    private Button shutter;
+    private View editPointBtn;
+    private RadioGroup modeGroup;
     private View flash;
 
     private HandlerThread camThread;
@@ -68,7 +75,9 @@ public class CameraActivity extends Activity implements TextureView.SurfaceTextu
 
     private String retakeUri;
     private int retakePoint;
+    private boolean resultMode;
     private boolean capturing;
+    private boolean pendingResult;
     private int pendingPoint;
     private Date pendingWhen;
 
@@ -79,6 +88,7 @@ public class CameraActivity extends Activity implements TextureView.SurfaceTextu
         store = new Store(this);
         retakeUri = getIntent().getStringExtra(EXTRA_RETAKE_URI);
         retakePoint = getIntent().getIntExtra(EXTRA_RETAKE_POINT, 1);
+        resultMode = "result".equals(getIntent().getStringExtra(EXTRA_MODE));
 
         preview = findViewById(R.id.preview);
         badge = findViewById(R.id.pointBadge);
@@ -87,16 +97,23 @@ public class CameraActivity extends Activity implements TextureView.SurfaceTextu
         shutter = findViewById(R.id.shutterBtn);
         editPointBtn = findViewById(R.id.editPointBtn);
         flash = findViewById(R.id.flash);
+        modeGroup = findViewById(R.id.camModeGroup);
+        modeGroup.check(resultMode ? R.id.camModeResult : R.id.camModePoint);
+        modeGroup.setOnCheckedChangeListener((g, id) -> {
+            resultMode = id == R.id.camModeResult;
+            paint();
+        });
 
         findViewById(R.id.backBtn).setOnClickListener(v -> finish());
         shutter.setOnClickListener(v -> takePicture());
         View.OnClickListener edit = v -> {
             if (retakeUri != null) { toast("重拍時沿用原本的點號"); return; }
+            if (resultMode) return;
             store.editPointDialog(this, this::paint);
         };
         editPointBtn.setOnClickListener(edit);
         badge.setOnClickListener(edit);
-        if (retakeUri != null) editPointBtn.setVisibility(View.GONE);
+        if (retakeUri != null) modeGroup.setVisibility(View.GONE);
 
         sound = new MediaActionSound();
         sound.load(MediaActionSound.SHUTTER_CLICK);
@@ -138,7 +155,7 @@ public class CameraActivity extends Activity implements TextureView.SurfaceTextu
             camThread = null;
             camHandler = null;
         }
-        if (capturing && retakeUri == null && store.next() == pendingPoint + 1) {
+        if (capturing && !pendingResult && retakeUri == null && store.next() == pendingPoint + 1) {
             // 快門按下後還沒拿到照片就離開：點號退回
             store.setNext(pendingPoint);
         }
@@ -165,10 +182,27 @@ public class CameraActivity extends Activity implements TextureView.SurfaceTextu
     }
 
     private void paint() {
-        int p = retakeUri != null ? retakePoint : store.next();
-        badge.setText(Store.label(p));
+        if (resultMode) {
+            badge.setText("成果圖");
+            badge.setTextColor(0xFFFFFFFF);
+            editPointBtn.setVisibility(View.GONE);
+        } else {
+            int p = retakeUri != null ? retakePoint : store.next();
+            badge.setText(Store.label(p));
+            badge.setTextColor(0xFFFFB547);
+            editPointBtn.setVisibility(retakeUri != null ? View.GONE : View.VISIBLE);
+        }
+        shutter.setSelected(resultMode);
         int n = store.countFor(Store.dayKey(new Date()));
         countText.setText(retakeUri != null ? "重拍" : "今天\n" + n + " 張");
+    }
+
+    /** 點號換了時，右上角數字彈一下。 */
+    private void pop(View v) {
+        v.setScaleX(1.18f);
+        v.setScaleY(1.18f);
+        v.animate().scaleX(1f).scaleY(1f).setDuration(260)
+                .setInterpolator(new android.view.animation.OvershootInterpolator(2.5f)).start();
     }
 
     // ---------- 相機 ----------
@@ -263,10 +297,14 @@ public class CameraActivity extends Activity implements TextureView.SurfaceTextu
         if (session == null || camera == null || capturing) return;
         capturing = true;
         shutter.setEnabled(false);
-        pendingPoint = retakeUri != null ? retakePoint : store.next();
+        pendingResult = resultMode;
+        pendingPoint = retakeUri != null ? retakePoint : resultMode ? 0 : store.next();
         pendingWhen = new Date();
-        if (retakeUri == null) store.setNext(pendingPoint + 1);
-        paint();
+        if (!pendingResult && retakeUri == null) {
+            store.setNext(pendingPoint + 1);
+            paint();
+            pop(badge);
+        }
         try {
             CaptureRequest.Builder b = camera.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
             b.addTarget(reader.getSurface());
@@ -289,7 +327,7 @@ public class CameraActivity extends Activity implements TextureView.SurfaceTextu
     }
 
     private void captureFailed() {
-        if (retakeUri == null && store.next() == pendingPoint + 1) store.setNext(pendingPoint);
+        if (!pendingResult && retakeUri == null && store.next() == pendingPoint + 1) store.setNext(pendingPoint);
         capturing = false;
         shutter.setEnabled(true);
         paint();
@@ -308,6 +346,7 @@ public class CameraActivity extends Activity implements TextureView.SurfaceTextu
             return;
         }
         int point = pendingPoint;
+        boolean result = pendingResult;
         Date when = pendingWhen;
         String replace = retakeUri;
         runOnUiThread(() -> {
@@ -318,7 +357,7 @@ public class CameraActivity extends Activity implements TextureView.SurfaceTextu
         });
         saver.execute(() -> {
             try {
-                Record rec = store.savePhoto(bytes, point, when, replace);
+                Record rec = store.savePhoto(bytes, result, point, when, replace);
                 Bitmap thumb = null;
                 try {
                     thumb = getContentResolver().loadThumbnail(Uri.parse(rec.uri), new Size(240, 240), null);
@@ -329,12 +368,14 @@ public class CameraActivity extends Activity implements TextureView.SurfaceTextu
                     if (t != null) lastThumb.setImageBitmap(t);
                     paint();
                     if (replace != null) {
-                        toast(Store.label(point) + " 已重拍");
+                        toast(Store.labelFor(rec) + " 已重拍");
                         finish();
+                    } else if (result) {
+                        toast("成果圖已存：" + store.nameFor(rec));
                     }
                 });
             } catch (Exception e) {
-                runOnUiThread(() -> toast(Store.label(point) + " 存檔失敗：" + e.getMessage()));
+                runOnUiThread(() -> toast((result ? "成果圖" : Store.label(point)) + " 存檔失敗：" + e.getMessage()));
             }
         });
     }

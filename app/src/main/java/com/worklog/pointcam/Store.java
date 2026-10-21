@@ -6,7 +6,9 @@ import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.media.ExifInterface;
 import android.net.Uri;
+import android.os.ParcelFileDescriptor;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.text.InputType;
@@ -118,10 +120,39 @@ final class Store {
 
     // ---------- 檔案 ----------
 
-    /** 檔名預設就是點號，例如 3.jpg；有前綴時為 A區_3.jpg。 */
-    String fileName(int point) {
+    private String prefix() {
         String pre = sp.getString("prefix", "").trim().replaceAll("[\\\\/:*?\"<>|]", "");
-        return (pre.isEmpty() ? "" : pre + "_") + point + ".jpg";
+        return pre.isEmpty() ? "" : pre + "_";
+    }
+
+    /** 點號照片檔名就是點號，例如 3.jpg；有前綴時為 A區_3.jpg。 */
+    String fileName(int point) { return prefix() + point + ".jpg"; }
+
+    /** 成果圖檔名是日期，例如 20261021.jpg；同一天第二張起為 20261021_2.jpg。 */
+    String resultFileName(String day, int seq) {
+        return prefix() + day.replace("-", "") + (seq > 1 ? "_" + seq : "") + ".jpg";
+    }
+
+    String nameFor(Record r) { return r.isResult() ? resultFileName(r.day, r.point) : fileName(r.point); }
+
+    static String labelFor(Record r) {
+        if (!r.isResult()) return label(r.point);
+        return r.point > 1 ? "成果圖 " + r.point : "成果圖";
+    }
+
+    private int nextResultSeq(String day) {
+        int max = 0;
+        for (Record r : records()) if (r.isResult() && r.day.equals(day)) max = Math.max(max, r.point);
+        return max + 1;
+    }
+
+    /** 照片大小設定：長邊像素（0 為原始）與 JPEG 品質。 */
+    int[] sizeSpec() {
+        switch (sp.getString("size", "small")) {
+            case "medium": return new int[]{2400, 82};
+            case "original": return new int[]{0, 92};
+            default: return new int[]{1600, 72};
+        }
     }
 
     Uri insertImage(String name, String day) {
@@ -138,53 +169,69 @@ final class Store {
     }
 
     /**
-     * 存一張剛拍好的照片：寫入相簿、依設定印字。
-     * replaceUri 不為 null 時會刪掉舊檔並沿用原檔名（重拍）。
+     * 存一張剛拍好的照片：依設定縮小、印字（成果圖不印），寫入相簿。
+     * replaceUri 不為 null 時會刪掉舊檔並沿用原本的日期與檔名（重拍）。
      */
-    Record savePhoto(byte[] jpeg, int point, Date when, String replaceUri) throws IOException {
+    Record savePhoto(byte[] jpeg, boolean result, int point, Date when, String replaceUri) throws IOException {
         ContentResolver cr = ctx.getContentResolver();
         String day = dayKey(when);
         if (replaceUri != null) {
-            // 重拍沿用原本那一天
             for (Record r : records()) if (r.uri.equals(replaceUri)) { day = r.day; break; }
         }
-        Uri uri = insertImage(fileName(point), day);
+        Record rec = new Record();
+        rec.kind = result ? Record.RESULT : Record.POINT;
+        rec.day = day;
+        rec.point = result && replaceUri == null ? nextResultSeq(day) : point;
+        rec.time = timeStr(when);
+        rec.ts = when.getTime();
+        String name = nameFor(rec);
+
+        String big = null;
+        List<String> lines = new ArrayList<>();
+        if (!result) {
+            if (sp.getBoolean("stampPoint", true)) big = label(point);
+            String proj = sp.getString("proj", "").trim();
+            if (!proj.isEmpty()) lines.add(proj);
+            if (sp.getBoolean("stampTime", true)) lines.add(dayKey(when) + "  " + timeStr(when));
+        }
+        int[] spec = sizeSpec();
+        byte[] data;
+        try {
+            data = Stamper.encode(jpeg, big, lines, spec[0], spec[1]);
+        } catch (Throwable t) {
+            data = jpeg; // 處理失敗時保留原始照片
+        }
+
+        Uri uri = insertImage(name, day);
         if (uri == null) throw new IOException("無法在相簿建立照片");
         try (OutputStream out = cr.openOutputStream(uri)) {
             if (out == null) throw new IOException("無法寫入照片");
-            out.write(jpeg);
+            out.write(data);
         }
-
-        boolean stampPoint = sp.getBoolean("stampPoint", true);
-        boolean stampTime = sp.getBoolean("stampTime", true);
-        String proj = sp.getString("proj", "").trim();
-        List<String> lines = new ArrayList<>();
-        if (!proj.isEmpty()) lines.add(proj);
-        if (stampTime) lines.add(dayKey(when) + "  " + timeStr(when));
-        if (stampPoint || !lines.isEmpty()) {
-            try {
-                Stamper.stamp(cr, uri, stampPoint ? label(point) : null, lines,
-                        new SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US).format(when));
-            } catch (Throwable t) {
-                // 印字失敗時保留原始照片
+        if (data != jpeg) {
+            // 重新壓縮會遺失 EXIF，補回拍攝時間讓相簿排序正確
+            String exifTime = new SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US).format(when);
+            try (ParcelFileDescriptor pfd = cr.openFileDescriptor(uri, "rw")) {
+                if (pfd != null) {
+                    ExifInterface exif = new ExifInterface(pfd.getFileDescriptor());
+                    exif.setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, exifTime);
+                    exif.setAttribute(ExifInterface.TAG_DATETIME, exifTime);
+                    exif.saveAttributes();
+                }
+            } catch (Exception ignored) {
             }
         }
 
         if (replaceUri != null) {
             deleteUri(Uri.parse(replaceUri));
             ContentValues v = new ContentValues();
-            v.put(MediaStore.Images.Media.DISPLAY_NAME, fileName(point));
+            v.put(MediaStore.Images.Media.DISPLAY_NAME, name);
             try { cr.update(uri, v, null, null); } catch (Exception ignored) { }
         }
 
-        Record r = new Record();
-        r.uri = uri.toString();
-        r.day = day;
-        r.point = point;
-        r.time = timeStr(when);
-        r.ts = when.getTime();
-        addRecord(r, replaceUri);
-        return r;
+        rec.uri = uri.toString();
+        addRecord(rec, replaceUri);
+        return rec;
     }
 
     void deleteUri(Uri uri) {

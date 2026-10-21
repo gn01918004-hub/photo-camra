@@ -18,15 +18,17 @@ import android.util.Size;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
-import android.widget.Button;
-import android.widget.CheckBox;
+import android.view.ViewGroup;
+import android.view.animation.DecelerateInterpolator;
+import android.view.animation.OvershootInterpolator;
+import android.widget.CompoundButton;
 import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.PopupMenu;
 import android.widget.RadioGroup;
-import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -44,13 +46,15 @@ public class MainActivity extends Activity {
     private Store store;
     private final ExecutorService bg = Executors.newSingleThreadExecutor();
 
-    private TextView nextNum, todayText, modeText, dayCount, emptyText;
-    private Button shootBtn, shareBtn, deleteDayBtn;
-    private LinearLayout settingsPanel, photoList;
-    private Spinner daySpinner;
+    private TextView nextNum, todayText, modeText, shootSub, dayCount, shareText, sizeNote;
+    private View settingsPanel, dayActions, emptyBox, deleteDayBtn;
+    private LinearLayout dayChips, photoGrid;
+    private ImageButton settingsBtn;
 
     private final List<String> days = new ArrayList<>();
     private String selectedDay;
+    private String animatedDay; // 換日期時卡片才做進場動畫
+    private int shownNext = -1;
 
     // 拍照畫面在背景存好照片時，主畫面跟著更新
     private final SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, key) -> {
@@ -68,16 +72,21 @@ public class MainActivity extends Activity {
         nextNum = findViewById(R.id.nextNum);
         todayText = findViewById(R.id.todayText);
         modeText = findViewById(R.id.modeText);
+        shootSub = findViewById(R.id.shootSub);
         dayCount = findViewById(R.id.dayCount);
-        emptyText = findViewById(R.id.emptyText);
-        shootBtn = findViewById(R.id.shootBtn);
-        shareBtn = findViewById(R.id.shareBtn);
-        deleteDayBtn = findViewById(R.id.deleteDayBtn);
+        shareText = findViewById(R.id.shareText);
+        sizeNote = findViewById(R.id.sizeNote);
         settingsPanel = findViewById(R.id.settingsPanel);
-        photoList = findViewById(R.id.photoList);
-        daySpinner = findViewById(R.id.daySpinner);
+        settingsBtn = findViewById(R.id.settingsBtn);
+        dayActions = findViewById(R.id.dayActions);
+        emptyBox = findViewById(R.id.emptyBox);
+        deleteDayBtn = findViewById(R.id.deleteDayBtn);
+        dayChips = findViewById(R.id.dayChips);
+        photoGrid = findViewById(R.id.photoGrid);
 
-        shootBtn.setOnClickListener(v -> startActivity(new Intent(this, CameraActivity.class)));
+        findViewById(R.id.shootBtn).setOnClickListener(v -> startActivity(new Intent(this, CameraActivity.class)));
+        findViewById(R.id.resultBtn).setOnClickListener(v -> startActivity(new Intent(this, CameraActivity.class)
+                .putExtra(CameraActivity.EXTRA_MODE, "result")));
         findViewById(R.id.pointBox).setOnClickListener(v -> store.editPointDialog(this, this::paintBoard));
         findViewById(R.id.plusBtn).setOnClickListener(v -> { store.setNext(store.next() + 1); paintBoard(); });
         findViewById(R.id.minusBtn).setOnClickListener(v -> { store.setNext(store.next() - 1); paintBoard(); });
@@ -86,9 +95,12 @@ public class MainActivity extends Activity {
                 .setNegativeButton("取消", null)
                 .setPositiveButton("確定", (d, w) -> { store.setNext(1); paintBoard(); toast("點號已重置為 1"); })
                 .show());
-        findViewById(R.id.settingsBtn).setOnClickListener(v -> settingsPanel.setVisibility(
-                settingsPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
-        shareBtn.setOnClickListener(v -> shareDay(selectedDay));
+        settingsBtn.setOnClickListener(v -> {
+            boolean open = settingsPanel.getVisibility() != View.VISIBLE;
+            settingsPanel.setVisibility(open ? View.VISIBLE : View.GONE);
+            settingsBtn.animate().rotation(open ? 90 : 0).setDuration(220).start();
+        });
+        findViewById(R.id.shareBtn).setOnClickListener(v -> shareDay(selectedDay));
         deleteDayBtn.setOnClickListener(v -> confirmDeleteDay(selectedDay));
 
         RadioGroup modeGroup = findViewById(R.id.modeGroup);
@@ -97,20 +109,20 @@ public class MainActivity extends Activity {
             store.sp.edit().putString("mode", id == R.id.modeDaily ? "daily" : "manual").apply();
             paintBoard();
         });
+        RadioGroup sizeGroup = findViewById(R.id.sizeGroup);
+        String size = store.sp.getString("size", "small");
+        sizeGroup.check("medium".equals(size) ? R.id.sizeMedium
+                : "original".equals(size) ? R.id.sizeOriginal : R.id.sizeSmall);
+        paintSizeNote();
+        sizeGroup.setOnCheckedChangeListener((g, id) -> {
+            store.sp.edit().putString("size", id == R.id.sizeMedium ? "medium"
+                    : id == R.id.sizeOriginal ? "original" : "small").apply();
+            paintSizeNote();
+        });
         bindText(findViewById(R.id.projName), "proj");
         bindText(findViewById(R.id.prefix), "prefix");
         bindCheck(findViewById(R.id.stampPoint), "stampPoint");
         bindCheck(findViewById(R.id.stampTime), "stampTime");
-
-        daySpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(AdapterView<?> p, View v, int pos, long id) {
-                if (pos < days.size() && !days.get(pos).equals(selectedDay)) {
-                    selectedDay = days.get(pos);
-                    renderList();
-                }
-            }
-            @Override public void onNothingSelected(AdapterView<?> p) { }
-        });
     }
 
     /** 舊版只有一個「印字」開關，拆成點號與時間兩個。 */
@@ -143,12 +155,32 @@ public class MainActivity extends Activity {
     private void paintBoard() {
         int n = store.next();
         nextNum.setText(String.valueOf(n));
-        shootBtn.setText("拍照 · " + Store.label(n));
-        todayText.setText(new SimpleDateFormat("M/d（E）", Locale.TAIWAN).format(new Date()));
+        if (shownNext != -1 && shownNext != n) {
+            nextNum.setScaleX(1.12f);
+            nextNum.setScaleY(1.12f);
+            nextNum.animate().scaleX(1f).scaleY(1f).setDuration(280)
+                    .setInterpolator(new OvershootInterpolator(2.2f)).start();
+        }
+        shownNext = n;
+        shootSub.setText(Store.label(n));
+        todayText.setText(new SimpleDateFormat("M月d日 EEEE", Locale.TAIWAN).format(new Date()));
         modeText.setText(store.isDaily() ? "隔日自動重置" : "僅手動重置");
     }
 
-    // ---------- 分享 ----------
+    private void paintSizeNote() {
+        switch (store.sp.getString("size", "small")) {
+            case "medium":
+                sizeNote.setText("長邊 2400 像素，每張約 0.7–1.2 MB，放大看細節也清楚。");
+                break;
+            case "original":
+                sizeNote.setText("相機原始解析度，每張約 3–6 MB，上傳較慢。");
+                break;
+            default:
+                sizeNote.setText("長邊 1600 像素，每張約 0.3–0.5 MB，文字與現場細節仍清楚可辨，上傳最快。");
+        }
+    }
+
+    // ---------- 分享與刪除 ----------
 
     private void shareDay(String day) {
         ArrayList<Uri> uris = new ArrayList<>();
@@ -160,8 +192,6 @@ public class MainActivity extends Activity {
         s.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         startActivity(Intent.createChooser(s, "分享 " + day + " 的 " + uris.size() + " 張照片"));
     }
-
-    // ---------- 刪除整天 ----------
 
     private void confirmDeleteDay(String day) {
         List<Record> list = sortedFor(day);
@@ -190,6 +220,27 @@ public class MainActivity extends Activity {
                 toast("已刪除 " + day + " 的 " + gone.size() + " 張照片");
             });
         });
+    }
+
+    private void deleteOne(Record r) {
+        new AlertDialog.Builder(this)
+                .setMessage("刪除 " + r.day + " " + Store.labelFor(r) + "？照片也會從手機相簿刪除。")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("刪除", (d, w) -> {
+                    store.deleteUri(Uri.parse(r.uri));
+                    List<Record> keep = new ArrayList<>();
+                    for (Record x : store.records()) if (!x.uri.equals(r.uri)) keep.add(x);
+                    store.saveRecords(keep);
+                })
+                .show();
+    }
+
+    private void retake(Record r) {
+        Intent i = new Intent(this, CameraActivity.class)
+                .putExtra(CameraActivity.EXTRA_RETAKE_URI, r.uri)
+                .putExtra(CameraActivity.EXTRA_RETAKE_POINT, r.point);
+        if (r.isResult()) i.putExtra(CameraActivity.EXTRA_MODE, "result");
+        startActivity(i);
     }
 
     // ---------- 清單 ----------
@@ -226,112 +277,160 @@ public class MainActivity extends Activity {
         days.clear();
         days.addAll(set);
         if (selectedDay == null || !days.contains(selectedDay)) selectedDay = today;
-
-        List<String> labels = new ArrayList<>();
-        for (String d : days) labels.add(d.equals(today) ? "今天 " + d : d);
-        ArrayAdapter<String> ad = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, labels);
-        ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        daySpinner.setAdapter(ad);
-        daySpinner.setSelection(days.indexOf(selectedDay), false);
+        renderChips();
         renderList();
+    }
+
+    private void renderChips() {
+        String today = Store.dayKey(new Date());
+        dayChips.removeAllViews();
+        for (String d : days) {
+            int n = store.countFor(d);
+            TextView chip = new TextView(this);
+            String name = d.equals(today) ? "今天" : d.substring(5).replace("-", "/").replaceFirst("^0", "");
+            chip.setText(n > 0 ? name + "  ·  " + n : name);
+            chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+            chip.setTypeface(Typeface.DEFAULT_BOLD);
+            chip.setTextColor(getColorStateList(R.color.chip_text));
+            chip.setBackgroundResource(R.drawable.bg_chip);
+            chip.setGravity(Gravity.CENTER);
+            chip.setPadding(dp(16), 0, dp(16), 0);
+            chip.setSelected(d.equals(selectedDay));
+            chip.setOnClickListener(v -> {
+                if (d.equals(selectedDay)) return;
+                selectedDay = d;
+                for (int i = 0; i < dayChips.getChildCount(); i++) {
+                    dayChips.getChildAt(i).setSelected(days.get(i).equals(d));
+                }
+                renderList();
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, dp(40));
+            lp.rightMargin = dp(8);
+            dayChips.addView(chip, lp);
+        }
     }
 
     private List<Record> sortedFor(String day) {
         List<Record> out = new ArrayList<>();
         for (Record r : store.records()) if (r.day.equals(day)) out.add(r);
-        out.sort((a, b) -> a.point != b.point ? Integer.compare(a.point, b.point) : Long.compare(a.ts, b.ts));
+        // 點號照片依點號排，成果圖排在最後
+        out.sort((a, b) -> {
+            if (a.isResult() != b.isResult()) return a.isResult() ? 1 : -1;
+            return a.point != b.point ? Integer.compare(a.point, b.point) : Long.compare(a.ts, b.ts);
+        });
         return out;
     }
 
     private void renderList() {
         List<Record> list = sortedFor(selectedDay);
-        dayCount.setText(list.size() + " 張");
-        shareBtn.setEnabled(!list.isEmpty());
-        shareBtn.setAlpha(list.isEmpty() ? 0.5f : 1f);
-        deleteDayBtn.setVisibility(list.isEmpty() ? View.GONE : View.VISIBLE);
-        emptyText.setVisibility(list.isEmpty() ? View.VISIBLE : View.GONE);
-        photoList.removeAllViews();
-        for (Record r : list) photoList.addView(row(r));
+        int results = 0;
+        for (Record r : list) if (r.isResult()) results++;
+        int points = list.size() - results;
+        dayCount.setText(list.isEmpty() ? "" : "點號 " + points + " 張 · 成果圖 " + results + " 張");
+        shareText.setText("分享全部 " + list.size() + " 張");
+        dayActions.setVisibility(list.isEmpty() ? View.GONE : View.VISIBLE);
+        emptyBox.setVisibility(list.isEmpty() ? View.VISIBLE : View.GONE);
+
+        boolean animate = !selectedDay.equals(animatedDay);
+        animatedDay = selectedDay;
+        photoGrid.removeAllViews();
+        int cardW = (getResources().getDisplayMetrics().widthPixels - dp(36) - dp(12)) / 2;
+        LinearLayout row = null;
+        for (int i = 0; i < list.size(); i++) {
+            if (i % 2 == 0) {
+                row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                rp.bottomMargin = dp(12);
+                photoGrid.addView(row, rp);
+            }
+            View card = card(list.get(i), cardW);
+            LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(cardW, cardW);
+            if (i % 2 == 1) cp.leftMargin = dp(12);
+            row.addView(card, cp);
+            if (animate) {
+                card.setAlpha(0f);
+                card.setTranslationY(dp(18));
+                card.animate().alpha(1f).translationY(0).setStartDelay(Math.min(i, 12) * 35L)
+                        .setDuration(320).setInterpolator(new DecelerateInterpolator()).start();
+            }
+        }
     }
 
-    private View row(Record r) {
-        int pad = dp(10);
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setBackgroundResource(R.drawable.bg_panel);
-        row.setPadding(pad, pad, pad, pad);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.bottomMargin = dp(8);
-        row.setLayoutParams(lp);
+    private View card(Record r, int size) {
+        FrameLayout card = new FrameLayout(this);
+        card.setBackgroundResource(R.drawable.bg_photo);
+        card.setClipToOutline(true);
+        card.setElevation(dp(2));
 
         ImageView img = new ImageView(this);
         img.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        img.setBackgroundColor(getColor(R.color.line));
-        row.addView(img, new LinearLayout.LayoutParams(dp(96), dp(72)));
+        card.addView(img, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         Uri uri = Uri.parse(r.uri);
         bg.execute(() -> {
             try {
-                Bitmap b = getContentResolver().loadThumbnail(uri, new Size(dp(192), dp(144)), null);
-                runOnUiThread(() -> img.setImageBitmap(b));
+                Bitmap b = getContentResolver().loadThumbnail(uri, new Size(size, size), null);
+                runOnUiThread(() -> {
+                    img.setImageBitmap(b);
+                    img.setAlpha(0f);
+                    img.animate().alpha(1f).setDuration(200).start();
+                });
             } catch (Exception ignored) {
             }
         });
-        img.setOnClickListener(v -> {
+        card.setOnClickListener(v -> {
             Intent view = new Intent(Intent.ACTION_VIEW);
             view.setDataAndType(uri, "image/jpeg");
             view.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             try { startActivity(view); } catch (ActivityNotFoundException ignored) { }
         });
 
-        LinearLayout info = new LinearLayout(this);
-        info.setOrientation(LinearLayout.VERTICAL);
-        info.setPadding(dp(12), 0, dp(4), 0);
-        TextView pt = new TextView(this);
-        pt.setText(Store.label(r.point));
-        pt.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
-        pt.setTypeface(Typeface.create("sans-serif-condensed", Typeface.BOLD));
-        pt.setTextColor(getColor(R.color.fg));
-        TextView tm = new TextView(this);
-        tm.setText(r.time);
-        tm.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        tm.setTextColor(getColor(R.color.muted));
-        info.addView(pt);
-        info.addView(tm);
-        row.addView(info, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        // 左下角：點號或成果圖 + 時間
+        LinearLayout tag = new LinearLayout(this);
+        tag.setOrientation(LinearLayout.VERTICAL);
+        tag.setBackgroundResource(r.isResult() ? R.drawable.bg_overlay_result : R.drawable.bg_overlay_chip);
+        tag.setPadding(dp(10), dp(4), dp(10), dp(5));
+        TextView label = new TextView(this);
+        label.setText(Store.labelFor(r));
+        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, r.isResult() ? 15 : 18);
+        label.setTypeface(getResources().getFont(R.font.barlow_bold));
+        label.setTextColor(r.isResult() ? getColor(R.color.amber_fg) : getColor(R.color.amber));
+        TextView time = new TextView(this);
+        time.setText(r.time.substring(0, 5));
+        time.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        time.setTextColor(r.isResult() ? getColor(R.color.amber_fg) : 0xE6FFFFFF);
+        tag.addView(label);
+        tag.addView(time);
+        FrameLayout.LayoutParams tp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM | Gravity.START);
+        tp.setMargins(dp(8), 0, 0, dp(8));
+        card.addView(tag, tp);
 
-        row.addView(smallBtn("重拍", R.color.fg, v -> startActivity(new Intent(this, CameraActivity.class)
-                .putExtra(CameraActivity.EXTRA_RETAKE_URI, r.uri)
-                .putExtra(CameraActivity.EXTRA_RETAKE_POINT, r.point))));
-        row.addView(smallBtn("刪除", R.color.danger, v -> new AlertDialog.Builder(this)
-                .setMessage("刪除 " + r.day + " " + Store.label(r.point) + "？照片也會從手機相簿刪除。")
-                .setNegativeButton("取消", null)
-                .setPositiveButton("刪除", (d, w) -> {
-                    store.deleteUri(uri);
-                    List<Record> keep = new ArrayList<>();
-                    for (Record x : store.records()) if (!x.uri.equals(r.uri)) keep.add(x);
-                    store.saveRecords(keep);
-                })
-                .show()));
-        return row;
-    }
-
-    private Button smallBtn(String text, int color, View.OnClickListener l) {
-        Button b = new Button(this);
-        b.setText(text);
-        b.setTextColor(getColor(color));
-        b.setBackgroundResource(R.drawable.bg_btn);
-        b.setStateListAnimator(null);
-        b.setMinWidth(0);
-        b.setMinimumWidth(0);
-        b.setPadding(dp(14), 0, dp(14), 0);
-        b.setOnClickListener(l);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, dp(44));
-        lp.leftMargin = dp(6);
-        b.setLayoutParams(lp);
-        return b;
+        // 右上角：更多（重拍、刪除）
+        ImageButton more = new ImageButton(this);
+        more.setImageResource(R.drawable.ic_more);
+        more.setColorFilter(0xFFFFFFFF);
+        more.setBackgroundResource(R.drawable.bg_overlay_btn);
+        more.setContentDescription("更多");
+        more.setOnClickListener(v -> {
+            PopupMenu pm = new PopupMenu(this, v);
+            pm.getMenu().add(0, 1, 0, "重拍");
+            pm.getMenu().add(0, 2, 1, "刪除");
+            pm.setOnMenuItemClickListener(item -> {
+                if (item.getItemId() == 1) retake(r);
+                else deleteOne(r);
+                return true;
+            });
+            pm.show();
+        });
+        FrameLayout.LayoutParams mp = new FrameLayout.LayoutParams(dp(36), dp(36), Gravity.TOP | Gravity.END);
+        mp.setMargins(0, dp(6), dp(6), 0);
+        card.addView(more, mp);
+        return card;
     }
 
     // ---------- 小工具 ----------
@@ -345,7 +444,7 @@ public class MainActivity extends Activity {
         });
     }
 
-    private void bindCheck(CheckBox c, String key) {
+    private void bindCheck(CompoundButton c, String key) {
         c.setChecked(store.sp.getBoolean(key, true));
         c.setOnCheckedChangeListener((b, on) -> store.sp.edit().putBoolean(key, on).apply());
     }
